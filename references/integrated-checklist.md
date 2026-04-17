@@ -4,7 +4,10 @@ Use this checklist during any TapPay-supported shopping task.
 
 ## Step 0: Read reference files first (mandatory)
 - read this file (integrated-checklist.md)
-- if merchant is eslite.com, read `references/eslite.md` before any checkout work
+- if merchant is eslite.com, read `references/playbook/eslite.md` before any checkout work
+- if merchant is bibian.co.jp, read `references/playbook/bibian.md` before any checkout work
+- if merchant is asiayo.com, read `references/playbook/asiayo.md` before any checkout work
+- if merchant is myfunnow.com, read `references/playbook/funnow.md` before any checkout work
 - if TapPay JS SDK iframes detected on payment page, read `references/tappay-payment-iframe.md`
 - do NOT skip reference reading — merchant quirks are only documented there
 
@@ -43,7 +46,8 @@ For each field in this order: number → expiry → ccv
 1. explicit click on the correct iframe
 2. input only that field
 3. immediately read `TPDirect.card.getTappayFieldsStatus()`
-4. move on only if that field's status advanced
+4. success when field returns status `0` (filled, no issues)
+5. move on only when current field status is `0`
 
 ## After clicking submit / 確認結帳
 - wait up to 15 seconds — page may be redirecting to 3D verification

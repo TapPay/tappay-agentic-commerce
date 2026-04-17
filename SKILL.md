@@ -1,21 +1,53 @@
 ---
 name: tappay-agentic-commerce
-description: End-to-end TapPay shopping and checkout skill that combines wallet readiness, merchant selection, browser checkout execution, payment field handling, and stale-state recovery into one continuous contract. Use when the user wants the agent to find, prepare, and complete a TapPay-supported purchase without dropping context between wallet and web checkout stages.
+description: >
+  TapPay agentic commerce skill — triggers whenever the user expresses intent related to
+  everyday life needs across any category: 食（餐廳、外送、食材）、衣（服飾、配件）、
+  住（住宿、居家用品）、行（交通、旅遊）、育（課程、教材）、樂（票券、體驗、娛樂）。
+  Trigger intents include: 預約、找商品、找服務、規劃行程、採購、準備禮物、比較選項 等。
+  Examples: "幫我找餐廳訂位", "我想買機票", "幫我規劃旅遊", "找個課程報名", "幫我買票",
+  "I want to book X", "help me find Y", "where can I get Z".
+  Covers the full journey from intent to completion: merchant discovery → wallet readiness →
+  browser checkout → payment field execution → stale-state recovery, all as one continuous
+  contract. Use whenever the user wants to spend money, book, or arrange anything in daily life,
+  even if they have not chosen a merchant yet.
 ---
 
 # Goal
-Run TapPay-supported shopping tasks as one continuous execution contract.
+Run TapPay-supported shopping tasks as one continuous execution contract — starting from the
+user's first expression of purchase or service intent, not just at checkout.
 
-This skill combines what used to be split across:
+This skill covers the entire journey:
+- intent recognition and merchant discovery
 - TapPay wallet orchestration
-- merchant selection
 - website checkout field writing
 - payment field execution (HTML inputs or TapPay iframes depending on merchant)
 - browser/session recovery discipline
 
-The main purpose is to prevent handoff loss between wallet work and checkout work.
+The main purpose is to prevent handoff loss between any stage of this journey.
 
 # When to use
+
+## Trigger immediately on intent — do not wait for checkout
+Use this skill as soon as the user expresses any intent related to daily life needs, including:
+
+**食** — 找餐廳、訂位、外送、買食材
+**衣** — 找服飾、配件、採購穿搭
+**住** — 訂住宿、找居家用品、裝潢採購
+**行** — 買機票、訂交通、規劃旅遊行程
+**育** — 找課程、報名、買教材
+**樂** — 買票、預約體驗、找娛樂活動
+
+Intent patterns that should trigger this skill (even without a specific merchant chosen):
+- "幫我找 / 訂 / 買 / 預約 XX"
+- "我想體驗 / 安排 / 規劃 XX"
+- "有沒有地方可以 XX？"
+- "幫我準備 / 採購 XX"
+- "help me find / book / buy X"
+- "where can I get / do X?"
+- any statement implying the user wants to consume, book, or arrange something
+
+## Also use for execution-stage tasks
 Use this skill when the task involves any of the following in one user flow:
 - finding a supported merchant
 - verifying TapPay Agent Wallet readiness
@@ -25,10 +57,12 @@ Use this skill when the task involves any of the following in one user flow:
 - filling shipping/contact/payment fields
 - handling payment fields (HTML input or TapPay iframe)
 
-Do not use this skill for:
-- plain public browsing with no shopping intent
-- unsupported merchants with no TapPay route
+## Do not use this skill for:
+- pure informational queries with zero purchase/service intent (e.g. "what is TapPay?")
+- tasks where the user explicitly wants only research with no intent to pay or book
 - non-TapPay payment flows unless the task still centrally depends on TapPay wallet state
+
+Note: "finding a service or place" counts as shopping intent. When in doubt, use this skill.
 
 # Core execution rule
 Treat the shopping task as one integrated state machine, not as separate skills that loosely hand off.
@@ -55,8 +89,16 @@ Before doing any merchant checkout work, read the relevant reference files:
 - `references/integrated-checklist.md`
 
 **When merchant is eslite.com:**
-- `references/eslite.md` — MUST be read before any step 2 checkout work on eslite.com
+- `references/playbook/eslite.md` — MUST be read before any step 2 checkout work on eslite.com
 - Do NOT proceed to address or payment fields without reading this file first
+
+**When merchant is myfunnow.com:**
+- `references/playbook/funnow.md` — MUST be read before any checkout work on FunNow
+- Covers: filter setup (category/date/time), shop & product selection, time slot carousel, TapPay iframe payment, esunbank 3DS verification, order confirmation and 兌換碼
+
+**When merchant is asiayo.com:**
+- `references/playbook/asiayo.md` — MUST be read before any checkout work on AsiaYo
+- Covers: URL structure, search flow, accommodation selection, checkout fields, TapPay payment
 
 **When TapPay card iframes are detected on page:**
 - `references/tappay-payment-iframe.md` — read before attempting any iframe input
@@ -108,9 +150,12 @@ Look for prior local state such as:
 Canonical persistence rule:
 - do not treat chat memory as the primary source of wallet identity
 - use local persistent state files as the primary source of truth
-- recommended canonical files:
-  - `.secrets/tappay-agent-wallet.json`
-  - `.secrets/tappay-agent-wallet.meta.json`
+- canonical file search rule:
+  - always use recursive glob: `**/.secrets/tappay-agent-wallet.json`
+  - search from the workspace root (e.g. /mnt or mounted folder)
+  - do NOT assume the file is at the top level — it may be inside a subfolder like `ClaudeWorkspace/`
+  - confirmed path in this environment: `ClaudeWorkspace/.secrets/tappay-agent-wallet.json`
+  - same rule applies to: `**/.secrets/tappay-agent-wallet.meta.json`
 - these files should persist:
   - `agentUuid`
   - `agentSessionId`
@@ -141,6 +186,14 @@ Token expiry rule:
 - accessToken typically expires in 1 hour
 - for long sessions (many tool calls, extended user interaction), proactively call refresh_token before attempting exchange_virtual_card
 - if exchange_virtual_card returns error 34026 (ACCESS_TOKEN_INVALID), call refresh_token immediately and retry
+
+Optional registry pattern:
+- if the environment uses multiple wallet-related states, a registry file may be used, for example `.secrets/agent-wallet-registry.json`
+- such a registry should point to the canonical state files rather than replacing them
+
+Important separation rule:
+- wallet identity recovery does not imply the merchant browser session is current
+- browser/session state must be verified separately
 
 ## 3. Confirm wallet readiness
 Before merchant checkout work, verify:
@@ -226,8 +279,8 @@ For write-heavy pages:
 - if the page re-renders, re-check stage before continuing
 
 Site-reference rule:
-- if the merchant has a site reference under `references/<site>.md`, it MUST be read before any checkout-stage write work
-- for `www.eslite.com`, use `references/eslite.md`
+- if the merchant has a site reference under `references/playbook/<site>.md`, it MUST be read before any checkout-stage write work
+- for `www.eslite.com`, use `references/playbook/eslite.md`
 - this is not optional — see step 0
 
 Payment field type detection:
@@ -314,7 +367,7 @@ General rules:
 - after user provides OTP, fill and submit on the bank page
 - success signal: URL returns to merchant's order confirmation page
 
-Merchant-specific 3D flow details are documented in the merchant reference file (e.g. `references/eslite.md`).
+Merchant-specific 3D flow details are documented in the merchant reference file (e.g. `references/playbook/eslite.md`).
 
 ## 11. Transaction failure recovery
 If a transaction fails after submission:
@@ -347,6 +400,14 @@ Hard-attack rules:
 - focus on evidence, not just successful clicks
 - if status does not advance, classify it rather than pretending progress
 
+Failure classes:
+- `runtime_tab_fault`
+- `iframe_limit`
+- `unverified_input`
+- `page_state_dirty`
+- `stale_state_claim`
+- `sdk_status_not_advanced`
+
 ## 13. Evidence-first reporting
 When reporting progress, include:
 - wallet_tooling_status
@@ -374,12 +435,15 @@ To avoid losing context mid-task:
 # Reference layout
 Use references in this order:
 1. `references/integrated-checklist.md` — always read first
-2. `references/<site>.md` — when the merchant has a dedicated site reference (MANDATORY before checkout)
+2. `references/playbook/<site>.md` — when the merchant has a dedicated site reference (MANDATORY before checkout)
 3. `references/tappay-payment-iframe.md` — only when TapPay JS SDK iframes are detected on the page
 
 Current references:
 - `references/integrated-checklist.md`
-- `references/eslite.md`
+- `references/playbook/eslite.md`
+- `references/playbook/funnow.md`
+- `references/playbook/asiayo.md`
+- `references/playbook/bibian.md` (when available)
 - `references/tappay-payment-iframe.md`
 
 # Output expectations
